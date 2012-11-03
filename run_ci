@@ -1,0 +1,5 @@
+while true; do
+    clear
+    cabal-dev build && echo 'ready'
+    inotifywait -qq -e modify -r src distributed-process-p2p.cabal
+done
