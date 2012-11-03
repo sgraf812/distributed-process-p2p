@@ -67,15 +67,17 @@ instance Binary PeerMessage where
 
 onPeerMsg :: MVar (S.Set DPT.ProcessId) -> PeerMessage -> Process ()
 
-onPeerMsg _ PeerPing = return ()
+onPeerMsg _ PeerPing = say "Peer ping" >> return ()
 
 onPeerMsg peers (PeerExchange ps) = do
+    say $ "Peer exchange: " ++ show ps
     liftIO $ do
         current <- takeMVar peers
         putMVar peers $ S.union current (S.fromList ps)
     mapM_ monitor ps
 
 onPeerMsg peers (PeerJoined pid) = do
+    say $ "Peer joined: " ++ show pid
     (seen, mine) <- liftIO $ do
         mine <- takeMVar peers
         seen <- return $! S.member pid mine
@@ -93,16 +95,20 @@ onPeerMsg peers (PeerJoined pid) = do
             forM_ mine $ \peer -> when (peer /= myPid) $ do
                 send peer $ PeerJoined pid
 
-onPeerMsg peers (PeerLeft pid) = liftIO $ do
-    current <- takeMVar peers
-    putMVar peers $ S.delete pid current
+onPeerMsg peers (PeerLeft pid) = do
+    say $ "Peer left: " ++ show pid
+    liftIO $ do
+        current <- takeMVar peers
+        putMVar peers $ S.delete pid current
 
 onDiscover :: DPT.ProcessId -> WhereIsReply -> Process ()
-onDiscover myPid (WhereIsReply "peerController" (Just seed)) =
+onDiscover myPid (WhereIsReply "peerController" (Just seed)) = do
+    say $ "Seed discovered: " ++ show seed
     send seed $ PeerJoined myPid
 
 onMonitor :: MVar (S.Set DPT.ProcessId) -> ProcessMonitorNotification -> Process ()
 onMonitor peerSet (ProcessMonitorNotification mref pid reason) = do
+    say $ "Monitor event: " ++ show (pid, reason)
     peers <- liftIO $ do
         peers <- takeMVar peerSet
         putMVar peerSet $! S.delete pid peers
