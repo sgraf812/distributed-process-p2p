@@ -32,4 +32,6 @@ executable jollycloud
   main-is:             JollyCloud.hs
   build-depends:
     base ==4.*,
+    mtl ==2.*,
+    distributed-process,
     distributed-process-p2p
