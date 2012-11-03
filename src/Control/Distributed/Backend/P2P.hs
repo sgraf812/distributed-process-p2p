@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 
-module Control.Distributed.Backend.P2P where
+module Control.Distributed.Backend.P2P (
+    bootstrap,
+    makeNodeId
+) where
 
 import           Control.Distributed.Process                as DP
 import qualified Control.Distributed.Process.Node           as DPN
@@ -19,6 +22,11 @@ import qualified Data.Set as S
 import Data.Typeable
 import Data.Binary
 
+-- | Make a NodeId from "host:port" string.
+makeNodeId :: String -> DPT.NodeId
+makeNodeId addr = DPT.NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
+
+-- | Start a peerController process and aquire connections to a swarm.
 bootstrap :: String -> String -> [DPT.NodeId] -> IO ()
 bootstrap host port seeds = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
@@ -101,5 +109,3 @@ onMonitor peerSet (ProcessMonitorNotification mref pid reason) = do
         return (S.toList peers)
     forM_ peers $ \peer -> send peer (PeerLeft pid)
 
-makeNodeId :: String -> DPT.NodeId
-makeNodeId addr = DPT.NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
