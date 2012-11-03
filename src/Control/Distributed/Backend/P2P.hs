@@ -27,24 +27,24 @@ makeNodeId :: String -> DPT.NodeId
 makeNodeId addr = DPT.NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
 
 -- | Start a peerController process and aquire connections to a swarm.
-bootstrap :: String -> String -> [DPT.NodeId] -> IO ()
-bootstrap host port seeds = do
+bootstrap :: String -> String -> [DPT.NodeId] -> (DPN.LocalNode -> DPT.ProcessId -> DP.Process ()) -> IO ()
+bootstrap host port seeds proc = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
     node <- DPN.newLocalNode transport DPN.initRemoteTable
 
-    DPN.runProcess node $ do
+    pcPid <- DPN.forkProcess node $ do
         pid <- getSelfPid
         register "peerController" pid
         peerSet <- liftIO $ newMVar (S.singleton pid)
 
         forM_ seeds $ flip whereisRemoteAsync "peerController"
 
-        forever $ do
-            receiveTimeout 5000000 [ match $ onPeerMsg peerSet
-                                   , match $ onMonitor peerSet
-                                   , match $ onDiscover pid
-                                   ]
-            liftIO $ readMVar peerSet >>= print
+        forever $ receiveWait [ match $ onPeerMsg peerSet
+                              , match $ onMonitor peerSet
+                              , match $ onDiscover pid
+                              ]
+
+    DPN.runProcess node $ proc node pcPid
 
 data PeerMessage = PeerPing
                  | PeerExchange [DPT.ProcessId]
