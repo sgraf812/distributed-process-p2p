@@ -1,5 +1,17 @@
 {-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 
+-- | Peer-to-peer node discovery backend for Cloud Haskell based on the TCP
+-- transport. Provided with a known node address it discovers and maintains
+-- the knowledge of it's peers.
+--
+-- > import qualified Control.Distributed.Backend.P2P as P2P
+-- > import           Control.Monad.Trans (liftIO)
+-- > import           Control.Concurrent (threadDelay)
+-- > 
+-- > main = P2P.bootstrap "myhostname" "9001" (P2P.makeNodeId "seedhost:9000") $ do
+-- >     liftIO $ threadDelay 1000000 -- give dispatcher a second to discover other nodes
+-- >     P2P.nsendPeers "myService" ("some", "message")
+
 module Control.Distributed.Backend.P2P (
     bootstrap,
     makeNodeId,
@@ -69,6 +81,7 @@ instance Binary QueryMessage where
             0 -> get >>= return . QueryMessage
             1 -> get >>= return . QueryResult
 
+-- | Get a list of currently available peer nodes.
 getPeers :: Process [DPT.NodeId]
 getPeers = do
     (s, r) <- newChan
