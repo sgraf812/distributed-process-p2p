@@ -18,9 +18,9 @@ main = do
     ["-h"] -> putStrLn "Usage: jollycloud addr port [<seed>..]"
     host:port:seeds -> P2P.bootstrap host port (map P2P.makeNodeId seeds) mainProcess
 
-mainProcess :: LocalNode -> ProcessId -> Process ()
-mainProcess myNode peerContId = do
-    liftIO $ forkProcess myNode logger
+mainProcess :: Process ()
+mainProcess = do
+    spawnLocal logger
 
     forever $ do
         liftIO $ threadDelay (10 * 1000000)

@@ -28,7 +28,7 @@ makeNodeId :: String -> DPT.NodeId
 makeNodeId addr = DPT.NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
 
 -- | Start a peerController process and aquire connections to a swarm.
-bootstrap :: String -> String -> [DPT.NodeId] -> (DPN.LocalNode -> DPT.ProcessId -> DP.Process ()) -> IO ()
+bootstrap :: String -> String -> [DPT.NodeId] -> DP.Process () -> IO ()
 bootstrap host port seeds proc = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
     node <- DPN.newLocalNode transport DPN.initRemoteTable
@@ -46,7 +46,7 @@ bootstrap host port seeds proc = do
                               , match $ onQuery peerSet
                               ]
 
-    DPN.runProcess node $ proc node pcPid
+    DPN.runProcess node proc
 
 -- | Request and response to query peer controller for remote nodes.
 data QueryMessage = QueryMessage (DPT.SendPort QueryMessage)
