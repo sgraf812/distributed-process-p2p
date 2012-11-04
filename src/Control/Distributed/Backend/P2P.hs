@@ -3,12 +3,14 @@
 module Control.Distributed.Backend.P2P (
     bootstrap,
     makeNodeId,
-    getPeers
+    getPeers,
+    nsendPeers
 ) where
 
 import           Control.Distributed.Process                as DP
 import qualified Control.Distributed.Process.Node           as DPN
 import qualified Control.Distributed.Process.Internal.Types as DPT
+import           Control.Distributed.Process.Serializable (Serializable)
 import           Network.Transport (EndPointAddress(..))
 import           Network.Transport.TCP (createTransport, defaultTCPParameters)
 
@@ -73,6 +75,10 @@ getPeers = do
     nsend "peerController" (QueryMessage s)
     QueryResult nodes <- receiveChan r
     return nodes
+
+-- | Broadcast a message to a specific service on all peers.
+nsendPeers :: Serializable a => String -> a -> Process ()
+nsendPeers service msg = getPeers >>= mapM_ (\peer -> nsendRemote peer service msg)
 
 -- | A set of p2p messages.
 data PeerMessage = PeerPing
