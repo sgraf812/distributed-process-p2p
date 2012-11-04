@@ -2,7 +2,8 @@
 
 module Control.Distributed.Backend.P2P (
     bootstrap,
-    makeNodeId
+    makeNodeId,
+    getPeers
 ) where
 
 import           Control.Distributed.Process                as DP
@@ -42,10 +43,38 @@ bootstrap host port seeds proc = do
         forever $ receiveWait [ match $ onPeerMsg peerSet
                               , match $ onMonitor peerSet
                               , match $ onDiscover pid
+                              , match $ onQuery peerSet
                               ]
 
     DPN.runProcess node $ proc node pcPid
 
+-- | Request and response to query peer controller for remote nodes.
+data QueryMessage = QueryMessage (DPT.SendPort QueryMessage)
+                  | QueryResult [DPT.NodeId]
+                  deriving (Eq, Show, Typeable)
+
+onQuery :: MVar (S.Set DPT.ProcessId) -> QueryMessage -> Process ()
+onQuery peers (QueryMessage reply) = do
+    ps <- liftIO $ readMVar peers
+    sendChan reply $ QueryResult . map processNodeId . S.toList $ ps
+
+instance Binary QueryMessage where
+    put (QueryMessage port) = putWord8 0 >> put port
+    put (QueryResult ns)    = putWord8 1 >> put ns
+    get = do
+        mt <- getWord8
+        case mt of
+            0 -> get >>= return . QueryMessage
+            1 -> get >>= return . QueryResult
+
+getPeers :: Process [DPT.NodeId]
+getPeers = do
+    (s, r) <- newChan
+    nsend "peerController" (QueryMessage s)
+    QueryResult nodes <- receiveChan r
+    return nodes
+
+-- | A set of p2p messages.
 data PeerMessage = PeerPing
                  | PeerExchange [DPT.ProcessId]
                  | PeerJoined DPT.ProcessId
