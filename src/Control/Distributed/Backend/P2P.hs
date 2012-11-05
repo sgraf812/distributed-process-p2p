@@ -36,6 +36,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.Set as S
 import Data.Typeable
 import Data.Binary
+import Data.Maybe (isJust)
 
 -- * Peer-to-peer API
 
@@ -60,8 +61,8 @@ bootstrap host port seeds proc = do
 
         forever $ receiveWait [ match $ onPeerMsg peerSet
                               , match $ onMonitor peerSet
-                              , match $ onDiscover pid
                               , match $ onQuery peerSet
+                              , matchIf isPeerDiscover $ onDiscover pid
                               ]
 
     DPN.runProcess node proc
@@ -159,8 +160,11 @@ onPeerMsg peers (PeerLeft pid) = do
         current <- takeMVar peers
         putMVar peers $ S.delete pid current
 
+isPeerDiscover :: WhereIsReply -> Bool
+isPeerDiscover (WhereIsReply service pid) = service == "peerController" && isJust pid
+
 onDiscover :: DPT.ProcessId -> WhereIsReply -> Process ()
-onDiscover myPid (WhereIsReply "peerController" (Just seed)) = do
+onDiscover myPid (WhereIsReply _ (Just seed)) = do
     say $ "Seed discovered: " ++ show seed
     send seed $ PeerJoined myPid
 
