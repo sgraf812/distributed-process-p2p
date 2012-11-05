@@ -8,7 +8,7 @@
 -- > import           Control.Monad.Trans (liftIO)
 -- > import           Control.Concurrent (threadDelay)
 -- > 
--- > main = P2P.bootstrap "myhostname" "9001" (P2P.makeNodeId "seedhost:9000") $ do
+-- > main = P2P.bootstrap "myhostname" "9001" [P2P.makeNodeId "seedhost:9000"] $ do
 -- >     liftIO $ threadDelay 1000000 -- give dispatcher a second to discover other nodes
 -- >     P2P.nsendPeers "myService" ("some", "message")
 
