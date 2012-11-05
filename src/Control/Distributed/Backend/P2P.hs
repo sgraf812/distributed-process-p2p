@@ -37,6 +37,10 @@ import qualified Data.Set as S
 import Data.Typeable
 import Data.Binary
 
+-- * Peer-to-peer API
+
+-- ** Initialization
+
 -- | Make a NodeId from "host:port" string.
 makeNodeId :: String -> DPT.NodeId
 makeNodeId addr = DPT.NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
@@ -61,6 +65,8 @@ bootstrap host port seeds proc = do
                               ]
 
     DPN.runProcess node proc
+
+-- ** Discovery
 
 -- | Request and response to query peer controller for remote nodes.
 data QueryMessage = QueryMessage (DPT.SendPort QueryMessage)
@@ -89,9 +95,13 @@ getPeers = do
     QueryResult nodes <- receiveChan r
     return nodes
 
+-- ** Messaging
+
 -- | Broadcast a message to a specific service on all peers.
 nsendPeers :: Serializable a => String -> a -> Process ()
 nsendPeers service msg = getPeers >>= mapM_ (\peer -> nsendRemote peer service msg)
+
+-- * Peer protocol
 
 -- | A set of p2p messages.
 data PeerMessage = PeerPing
