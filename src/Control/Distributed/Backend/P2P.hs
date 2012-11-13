@@ -32,7 +32,6 @@ import Control.Monad
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Concurrent.MVar
-import System.Timeout (timeout)
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
