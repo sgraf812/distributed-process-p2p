@@ -1,5 +1,5 @@
 name:                distributed-process-p2p
-version:             0.1.0.1
+version:             0.1.0.2
 synopsis:            Peer-to-peer node discovery for Cloud Haskell
 description:         Bootstraps a peer-to-peer connection network from a set of known hosts.
 homepage:            https://bitbucket.org/dpwiz/distributed-process-p2p/
@@ -27,7 +27,7 @@ library
     containers ==0.4.*,
     binary ==0.5.*,
 
-    distributed-process >=0.4.0.3,
+    distributed-process >=0.4.0.3 && <0.5,
     network-transport ==0.3.*,
     network-transport-tcp ==0.3.*
 
