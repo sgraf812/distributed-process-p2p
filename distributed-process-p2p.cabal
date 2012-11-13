@@ -27,7 +27,7 @@ library
     containers ==0.4.*,
     binary ==0.5.*,
 
-    distributed-process ==0.4.*,
+    distributed-process >=0.4.0.3,
     network-transport ==0.3.*,
     network-transport-tcp ==0.3.*
 

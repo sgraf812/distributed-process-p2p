@@ -16,7 +16,9 @@ module Control.Distributed.Backend.P2P (
     bootstrap,
     makeNodeId,
     getPeers,
-    nsendPeers
+    getCapable,
+    nsendPeers,
+    nsendCapable
 ) where
 
 import           Control.Distributed.Process                as DP
@@ -30,6 +32,7 @@ import Control.Monad
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Concurrent.MVar
+import System.Timeout (timeout)
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -96,11 +99,28 @@ getPeers = do
     QueryResult nodes <- receiveChan r
     return nodes
 
+-- | Poll a network for a list of specific service providers.
+getCapable :: String -> Process [DPT.ProcessId]
+getCapable service = do
+    (s, r) <- newChan
+    nsendPeers "peerController" $ PeerCapRequest service s
+    say "Waiting for capable nodes..."
+
+    go r []
+
+    where go r acc = do res <- receiveChanTimeout 100000 r
+                        case res of Just pid -> say "cap hit" >> go r (pid:acc)
+                                    Nothing -> say "cap done" >> return acc
+
 -- ** Messaging
 
 -- | Broadcast a message to a specific service on all peers.
 nsendPeers :: Serializable a => String -> a -> Process ()
 nsendPeers service msg = getPeers >>= mapM_ (\peer -> nsendRemote peer service msg)
+
+-- | Broadcast a message to a service of on nodes currently running it.
+nsendCapable :: Serializable a => String -> a -> Process ()
+nsendCapable service msg = getCapable service >>= mapM_ (\pid -> send pid msg)
 
 -- * Peer protocol
 
@@ -109,6 +129,7 @@ data PeerMessage = PeerPing
                  | PeerExchange [DPT.ProcessId]
                  | PeerJoined DPT.ProcessId
                  | PeerLeft DPT.ProcessId
+                 | PeerCapRequest String (DPT.SendPort DPT.ProcessId)
                  deriving (Eq, Show, Typeable)
 
 instance Binary PeerMessage where
@@ -116,6 +137,7 @@ instance Binary PeerMessage where
     put (PeerExchange ps) = putWord8 1 >> put ps
     put (PeerJoined pid)  = putWord8 2 >> put pid
     put (PeerLeft pid)    = putWord8 3 >> put pid
+    put (PeerCapRequest s r) = putWord8 4 >> put s >> put r
     get = do
         mt <- getWord8
         case mt of
@@ -123,6 +145,7 @@ instance Binary PeerMessage where
             1 -> PeerExchange <$> get
             2 -> PeerJoined <$> get
             3 -> PeerLeft <$> get
+            4 -> PeerCapRequest <$> get <*> get
 
 onPeerMsg :: MVar (S.Set DPT.ProcessId) -> PeerMessage -> Process ()
 
@@ -159,6 +182,10 @@ onPeerMsg peers (PeerLeft pid) = do
     liftIO $ do
         current <- takeMVar peers
         putMVar peers $ S.delete pid current
+
+onPeerMsg _ (PeerCapRequest service replyTo) = do
+    say $ "Capability request: " ++ service
+    whereis service >>= maybe (return ()) (sendChan replyTo)
 
 isPeerDiscover :: WhereIsReply -> Bool
 isPeerDiscover (WhereIsReply service pid) = service == "peerController" && isJust pid
