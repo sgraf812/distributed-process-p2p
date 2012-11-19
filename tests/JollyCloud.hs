@@ -63,7 +63,9 @@ roomService :: String -> Process ()
 roomService s = do
     msg <- expect :: Process (Maybe String)
     case msg of
-        Nothing -> liftIO . putStrLn $ "Leaving: " ++ s
+        Nothing -> do
+            liftIO . putStrLn $ "Leaving: " ++ s
+            unregister s
         Just m -> do
             liftIO . putStrLn $ "<" ++ s ++ "> " ++ m
             roomService s
