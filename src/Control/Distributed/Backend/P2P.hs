@@ -122,7 +122,7 @@ onDiscover state (WhereIsReply _ (Just seedPid)) = do
     peers <- receiveChan rp
 
     known <- liftIO $ readMVar (p2pPeers state)
-    mapM_ (doRegister state) (S.toList $ S.difference known peers)
+    mapM_ (doRegister state) (S.toList $ S.difference peers known)
 
 onPeerRequest :: PeerState -> (ProcessId, SendPort Peers) -> Process ()
 onPeerRequest PeerState{..} (peer, replyTo) = do
