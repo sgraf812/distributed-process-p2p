@@ -32,6 +32,7 @@ import Control.Monad
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Concurrent.MVar
+import Control.Concurrent (threadDelay)
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -52,7 +53,6 @@ initPeerState :: Process PeerState
 initPeerState = do
     self <- getSelfPid
     peers <- liftIO $ newMVar (S.singleton self)
-    register peerControllerService self
     return $! PeerState peers
 
 -- ** Initialization
@@ -69,6 +69,15 @@ bootstrap host port seeds proc = do
 
     pcPid <- forkProcess node $ do
         state <- initPeerState
+
+        let waitRegister = do
+            liftIO $ threadDelay 250000
+            res <- whereis peerControllerService
+            case res of
+                Nothing -> waitRegister
+                Just _ -> return ()
+        getSelfPid >>= register peerControllerService >> waitRegister
+
         mapM_ doDiscover seeds
         say "P2P controller started."
         forever $ receiveWait [ matchIf isPeerDiscover $ onDiscover state
