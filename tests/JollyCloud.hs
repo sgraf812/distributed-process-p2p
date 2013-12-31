@@ -16,7 +16,7 @@ main = do
 
   case args of
     ["-h"] -> putStrLn "Usage: jollycloud addr port [<seed>..]"
-    host:port:seeds -> P2P.bootstrap host port (map P2P.makeNodeId seeds) mainProcess
+    host:port:seeds -> P2P.bootstrap host port (map P2P.makeNodeId seeds) initRemoteTable mainProcess
 
 mainProcess :: Process ()
 mainProcess = do

@@ -26,6 +26,7 @@ import Control.Distributed.Process.Node           as DPN
 import Control.Distributed.Process.Internal.Types as DPT
 import Control.Distributed.Process.Serializable (Serializable)
 import Network.Transport (EndPointAddress(..))
+import Network.Socket (HostName, ServiceName)
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
 
 import Control.Monad
@@ -62,10 +63,10 @@ makeNodeId :: String -> NodeId
 makeNodeId addr = NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
 
 -- | Start a controller service process and aquire connections to a swarm.
-bootstrap :: String -> String -> [NodeId] -> Process () -> IO ()
-bootstrap host port seeds proc = do
+bootstrap :: HostName -> ServiceName -> [NodeId] -> RemoteTable -> Process () -> IO ()
+bootstrap host port seeds rTable proc = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
-    node <- newLocalNode transport initRemoteTable
+    node <- newLocalNode transport rTable
 
     pcPid <- forkProcess node $ do
         state <- initPeerState
