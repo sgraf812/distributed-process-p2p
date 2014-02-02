@@ -18,7 +18,8 @@ module Control.Distributed.Backend.P2P (
     getPeers,
     getCapable,
     nsendPeers,
-    nsendCapable
+    nsendCapable,
+    startPeerController
 ) where
 
 import Control.Distributed.Process                as DP
@@ -68,7 +69,13 @@ bootstrap host port seeds rTable proc = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
     node <- newLocalNode transport rTable
 
-    pcPid <- forkProcess node $ do
+    void $ forkProcess node $ startPeerController seeds
+    runProcess node proc
+
+-- | Start a controller service process in an existing Process
+startPeerController :: [NodeId] -> Process ()
+startPeerController seeds = do
+   void $ spawnLocal $ do
         state <- initPeerState
 
         let waitRegister = do
@@ -87,9 +94,6 @@ bootstrap host port seeds rTable proc = do
                               , match $ onPeerQuery state
                               , match $ onPeerCapable
                               ]
-
-    runProcess node proc
-
 -- ** Discovery
 
 doDiscover :: NodeId -> Process ()
