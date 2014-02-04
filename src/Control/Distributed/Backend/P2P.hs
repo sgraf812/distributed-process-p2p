@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards, DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 
 -- | Peer-to-peer node discovery backend for Cloud Haskell based on the TCP
 -- transport. Provided with a known node address it discovers and maintains
@@ -14,12 +14,12 @@
 
 module Control.Distributed.Backend.P2P (
     bootstrap,
+    peerController,
     makeNodeId,
     getPeers,
     getCapable,
     nsendPeers,
-    nsendCapable,
-    startPeerController
+    nsendCapable
 ) where
 
 import Control.Distributed.Process                as DP
@@ -31,21 +31,14 @@ import Network.Socket (HostName, ServiceName)
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
 
 import Control.Monad
-import Control.Applicative
-import Control.Monad.Trans
 import Control.Concurrent.MVar
 import Control.Concurrent (threadDelay)
 
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.Set as S
-import Data.Typeable
-import Data.Binary
 import Data.Maybe (isJust)
 
 -- * Peer-to-peer API
-
-peerControllerService = "P2P:Controller"
 
 type Peers = S.Set ProcessId
 
@@ -69,31 +62,34 @@ bootstrap host port seeds rTable proc = do
     transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
     node <- newLocalNode transport rTable
 
-    void $ forkProcess node $ startPeerController seeds
+    _ <- forkProcess node $ peerController seeds
     runProcess node proc
 
--- | Start a controller service process in an existing Process
-startPeerController :: [NodeId] -> Process ()
-startPeerController seeds = do
-   void $ spawnLocal $ do
-        state <- initPeerState
+peerControllerService :: String
+peerControllerService = "P2P:Controller"
 
-        let waitRegister = do
-            liftIO $ threadDelay 250000
-            res <- whereis peerControllerService
-            case res of
-                Nothing -> waitRegister
-                Just _ -> return ()
-        getSelfPid >>= register peerControllerService >> waitRegister
+-- | A P2P controller service process.
+peerController :: [NodeId] -> Process ()
+peerController seeds = do
+    state <- initPeerState
 
-        mapM_ doDiscover seeds
-        say "P2P controller started."
-        forever $ receiveWait [ matchIf isPeerDiscover $ onDiscover state
-                              , match $ onMonitor state
-                              , match $ onPeerRequest state
-                              , match $ onPeerQuery state
-                              , match $ onPeerCapable
-                              ]
+    let waitRegister = do
+        liftIO $ threadDelay 250000
+        res <- whereis peerControllerService
+        case res of
+            Nothing -> waitRegister
+            Just _ -> return ()
+    getSelfPid >>= register peerControllerService >> waitRegister
+
+    mapM_ doDiscover seeds
+    say "P2P controller started."
+    forever $ receiveWait [ matchIf isPeerDiscover $ onDiscover state
+                          , match $ onMonitor state
+                          , match $ onPeerRequest state
+                          , match $ onPeerQuery state
+                          , match $ onPeerCapable
+                          ]
+
 -- ** Discovery
 
 doDiscover :: NodeId -> Process ()
@@ -102,13 +98,13 @@ doDiscover node = do
     whereisRemoteAsync node peerControllerService
 
 doRegister :: PeerState -> ProcessId -> Process ()
-doRegister state@PeerState{..} pid = do
+doRegister (PeerState{..}) pid = do
     pids <- liftIO $ takeMVar p2pPeers
     if S.member pid pids
         then liftIO $ putMVar p2pPeers pids
         else do
             say $ "Registering peer:" ++ show pid
-            monitor pid
+            _ <- monitor pid
 
             liftIO $ putMVar p2pPeers (S.insert pid pids)
             say $ "New node: " ++ show pid
@@ -126,6 +122,7 @@ isPeerDiscover (WhereIsReply service pid) =
     service == peerControllerService && isJust pid
 
 onDiscover :: PeerState -> WhereIsReply -> Process ()
+onDiscover _     (WhereIsReply _ Nothing) = return ()
 onDiscover state (WhereIsReply _ (Just seedPid)) = do
     say $ "Peer discovered: " ++ show seedPid
 
@@ -145,7 +142,7 @@ onPeerRequest PeerState{..} (peer, replyTo) = do
     if S.member peer peers
         then liftIO $ putMVar p2pPeers peers
         else do
-            monitor peer
+            _ <- monitor peer
             liftIO $ putMVar p2pPeers (S.insert peer peers)
 
     sendChan replyTo peers
