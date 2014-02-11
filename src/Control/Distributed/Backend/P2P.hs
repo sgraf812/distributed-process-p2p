@@ -63,7 +63,12 @@ bootstrap host port seeds rTable proc = do
     node <- newLocalNode transport rTable
 
     _ <- forkProcess node $ peerController seeds
-    runProcess node proc
+    let waitController = do
+        res <- whereis peerControllerService
+        case res of
+            Nothing -> (liftIO $ threadDelay 100000) >> waitController
+            Just _ -> say "Bootstrap complete." >> proc
+    runProcess node waitController
 
 peerControllerService :: String
 peerControllerService = "P2P:Controller"
@@ -73,13 +78,7 @@ peerController :: [NodeId] -> Process ()
 peerController seeds = do
     state <- initPeerState
 
-    let waitRegister = do
-        liftIO $ threadDelay 250000
-        res <- whereis peerControllerService
-        case res of
-            Nothing -> waitRegister
-            Just _ -> return ()
-    getSelfPid >>= register peerControllerService >> waitRegister
+    getSelfPid >>= register peerControllerService
 
     mapM_ doDiscover seeds
     say "P2P controller started."
