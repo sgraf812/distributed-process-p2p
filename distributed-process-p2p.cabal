@@ -20,7 +20,7 @@ source-repository head
 
 library
   exposed-modules:     Control.Distributed.Backend.P2P
-  -- other-modules:       
+  -- other-modules:
   hs-source-dirs:      src
   ghc-options:         -Wall
   build-depends:

@@ -13,26 +13,32 @@
 -- >     P2P.nsendPeers "myService" ("some", "message")
 
 module Control.Distributed.Backend.P2P (
+    -- * Starting peer controller
     bootstrap,
+    bootstrapNonBlocking,
     peerController,
+    -- * Nodes manipulation
     makeNodeId,
     getPeers,
     getCapable,
     nsendPeers,
-    nsendCapable
+    nsendCapable,
+    -- * Auxiliary
+    createLocalNode,
+    waitController
 ) where
 
 import Control.Distributed.Process                as DP
 import Control.Distributed.Process.Node           as DPN
-import Control.Distributed.Process.Internal.Types as DPT
 import Control.Distributed.Process.Serializable (Serializable)
 import Network.Transport (EndPointAddress(..))
 import Network.Socket (HostName, ServiceName)
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
 
-import Control.Monad
-import Control.Concurrent.MVar
+import Control.Applicative
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.MVar
+import Control.Monad
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Set as S
@@ -58,17 +64,34 @@ makeNodeId addr = NodeId . EndPointAddress . BS.concat $ [BS.pack addr, ":0"]
 
 -- | Start a controller service process and aquire connections to a swarm.
 bootstrap :: HostName -> ServiceName -> [NodeId] -> RemoteTable -> Process () -> IO ()
-bootstrap host port seeds rTable proc = do
-    transport <- either (error . show) id `fmap` createTransport host port defaultTCPParameters
-    node <- newLocalNode transport rTable
-
+bootstrap host port seeds rTable prc = do
+    node <- createLocalNode host port rTable
     _ <- forkProcess node $ peerController seeds
-    let waitController = do
-        res <- whereis peerControllerService
-        case res of
-            Nothing -> (liftIO $ threadDelay 100000) >> waitController
-            Just _ -> say "Bootstrap complete." >> proc
-    runProcess node waitController
+    runProcess node $ waitController prc
+
+-- | Like 'bootstrap' but use 'forkProcess' instead of 'runProcess'. Returns local node and pid of given process
+bootstrapNonBlocking :: HostName -> ServiceName -> [NodeId] -> RemoteTable -> Process () -> IO (LocalNode, ProcessId)
+bootstrapNonBlocking host port seeds rTable prc = do
+    node <- createLocalNode host port rTable
+    _ <- forkProcess node $ peerController seeds
+    pid <- forkProcess node $ waitController prc
+    return (node, pid)
+
+-- | Waits for controller to start, then runs given process
+waitController :: Process a -> Process a
+waitController prc = do
+    res <- whereis peerControllerService
+    case res of
+        Nothing -> (liftIO $ threadDelay 100000) >> waitController prc
+        Just _ -> say "Bootstrap complete." >> prc
+
+-- | Creates tcp local node which used by 'bootstrap'
+createLocalNode :: HostName -> ServiceName -> RemoteTable -> IO LocalNode
+createLocalNode host port rTable = do
+    transport <- either (error . show) id
+                 <$> createTransport host port defaultTCPParameters
+    newLocalNode transport rTable
+
 
 peerControllerService :: String
 peerControllerService = "P2P:Controller"
@@ -195,4 +218,3 @@ nsendPeers service msg = getPeers >>= mapM_ (\peer -> nsendRemote peer service m
 -- | Broadcast a message to a service of on nodes currently running it.
 nsendCapable :: Serializable a => String -> a -> Process ()
 nsendCapable service msg = getCapable service >>= mapM_ (\pid -> send pid msg)
-
