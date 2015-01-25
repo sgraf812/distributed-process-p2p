@@ -15,9 +15,8 @@ extra-source-files:
   CHANGELOG
 
 source-repository head
-  type:     mercurial
-  location: http://bitbucket.org/dpwiz/distributed-process-p2p
-
+  type:     git
+  location: https://bitbucket.org/dpwiz/distributed-process-p2p
 library
   exposed-modules:     Control.Distributed.Backend.P2P
   -- other-modules:
