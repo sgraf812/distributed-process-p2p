@@ -1,3 +1,8 @@
+0.1.3.2:
+
+    * Drop upper bounds.
+    * Put jollycloud node under a flag.
+
 0.1.3.1:
 
     * Unpack and export more bootstrapping functions.
