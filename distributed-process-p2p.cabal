@@ -20,7 +20,8 @@ flag build-example
 
 source-repository head
   type:     git
-  location: https://bitbucket.org/dpwiz/distributed-process-p2p
+  location: git@bitbucket.org:dpwiz/distributed-process-p2p.git
+
 library
   exposed-modules:     Control.Distributed.Backend.P2P
   -- other-modules:
