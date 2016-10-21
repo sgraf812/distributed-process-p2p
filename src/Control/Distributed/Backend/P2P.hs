@@ -83,7 +83,7 @@ waitController prc = do
     res <- whereis peerControllerService
     case res of
         Nothing -> (liftIO $ threadDelay 100000) >> waitController prc
-        Just _ -> say "Bootstrap complete." >> prc
+        Just _ -> prc
 
 -- | Creates tcp local node which used by 'bootstrap'
 createLocalNode :: HostName -> ServiceName -> RemoteTable -> IO LocalNode
@@ -104,7 +104,6 @@ peerController seeds = do
     getSelfPid >>= register peerControllerService
 
     mapM_ doDiscover seeds
-    say "P2P controller started."
     forever $ receiveWait [ matchIf isPeerDiscover $ onDiscover state
                           , match $ onMonitor state
                           , match $ onPeerRequest state
@@ -116,7 +115,6 @@ peerController seeds = do
 
 doDiscover :: NodeId -> Process ()
 doDiscover node = do
-    say $ "Examining node: " ++ show node
     whereisRemoteAsync node peerControllerService
 
 doRegister :: PeerState -> ProcessId -> Process ()
@@ -125,16 +123,13 @@ doRegister (PeerState{..}) pid = do
     if S.member pid pids
         then liftIO $ putMVar p2pPeers pids
         else do
-            say $ "Registering peer:" ++ show pid
             _ <- monitor pid
 
             liftIO $ putMVar p2pPeers (S.insert pid pids)
-            say $ "New node: " ++ show pid
             doDiscover $ processNodeId pid
 
 doUnregister :: PeerState -> Maybe MonitorRef -> ProcessId -> Process ()
 doUnregister PeerState{..} mref pid = do
-    say $ "Unregistering peer: " ++ show pid
     maybe (return ()) unmonitor mref
     peers <- liftIO $ takeMVar p2pPeers
     liftIO $ putMVar p2pPeers (S.delete pid peers)
@@ -146,12 +141,9 @@ isPeerDiscover (WhereIsReply service pid) =
 onDiscover :: PeerState -> WhereIsReply -> Process ()
 onDiscover _     (WhereIsReply _ Nothing) = return ()
 onDiscover state (WhereIsReply _ (Just seedPid)) = do
-    say $ "Peer discovered: " ++ show seedPid
-
     (sp, rp) <- newChan
     self <- getSelfPid
     send seedPid (self, sp :: SendPort Peers)
-    say $ "Waiting for peers..."
     peers <- receiveChan rp
 
     known <- liftIO $ readMVar (p2pPeers state)
@@ -159,7 +151,6 @@ onDiscover state (WhereIsReply _ (Just seedPid)) = do
 
 onPeerRequest :: PeerState -> (ProcessId, SendPort Peers) -> Process ()
 onPeerRequest PeerState{..} (peer, replyTo) = do
-    say $ "Peer exchange with " ++ show peer
     peers <- liftIO $ takeMVar p2pPeers
     if S.member peer peers
         then liftIO $ putMVar p2pPeers peers
@@ -171,20 +162,17 @@ onPeerRequest PeerState{..} (peer, replyTo) = do
 
 onPeerQuery :: PeerState -> SendPort Peers -> Process ()
 onPeerQuery PeerState{..} replyTo = do
-    say $ "Local peer query."
     liftIO (readMVar p2pPeers) >>= sendChan replyTo
 
 onPeerCapable :: (String, SendPort ProcessId) -> Process ()
 onPeerCapable (service, replyTo) = do
-    say $ "Capability request: " ++ service
     res <- whereis service
     case res of
-        Nothing -> say "I can't."
-        Just pid -> say "I can!" >> sendChan replyTo pid
+        Nothing -> return ()
+        Just pid -> sendChan replyTo pid
 
 onMonitor :: PeerState -> ProcessMonitorNotification -> Process ()
 onMonitor state (ProcessMonitorNotification mref pid reason) = do
-    say $ "Monitor event: " ++ show (pid, reason)
     doUnregister state (Just mref) pid
 
 -- ** Discovery
@@ -192,7 +180,6 @@ onMonitor state (ProcessMonitorNotification mref pid reason) = do
 -- | Get a list of currently available peer nodes.
 getPeers :: Process [NodeId]
 getPeers = do
-    say $ "Requesting peer list from local controller..."
     (sp, rp) <- newChan
     nsend peerControllerService (sp :: SendPort Peers)
     receiveChan rp >>= return . map processNodeId . S.toList
@@ -202,12 +189,11 @@ getCapable :: String -> Process [ProcessId]
 getCapable service = do
     (sp, rp) <- newChan
     nsendPeers peerControllerService (service, sp)
-    say "Waiting for capable nodes..."
     go rp []
 
     where go rp acc = do res <- receiveChanTimeout 100000 rp
-                         case res of Just pid -> say "cap hit" >> go rp (pid:acc)
-                                     Nothing -> say "cap done" >> return acc
+                         case res of Just pid -> go rp (pid:acc)
+                                     Nothing -> return acc
 
 -- ** Messaging
 
